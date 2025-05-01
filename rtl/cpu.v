@@ -61,7 +61,7 @@ wire              reg_write_mem_wb, mem_2_reg_mem_wb;
 wire [       4:0] regfile_waddr;
 wire [      63:0] regfile_wdata,mem_data_wb,mem_data,alu_out,
                   regfile_rdata_1,regfile_rdata_2,
-                  alu_operand_2;
+                  alu_operand_2, alu_tmp_operand_2, alu_operand_1;
 wire [      63:0] mem_data_mem_wb;
 wire [      63:0] alu_out_ex_mem;
 wire [      63:0] alu_out_mem_wb;
@@ -70,6 +70,8 @@ wire [      63:0] regfile_rdata_2_ex_mem;
 
 wire signed [63:0] immediate_extended;
 wire signed [63:0] immediate_extended_id_ex;
+
+wire [1:0] mux3_1_sel, mux3_2_sel;
 
 
 reg_arstn_en#(
@@ -195,19 +197,49 @@ alu_control alu_ctrl(
    .alu_control    (alu_control       )
 );
 
+forward_unit forward_unit_inst(
+      .next_rs1(instruction_id_ex[19:15]),
+      .next_rs2(instruction_id_ex[24:20]),
+      .prev_rd_mem(instruction_ex_mem[11:7]),
+      .prev_rd_wb(instruction_mem_wb[11:7]),
+      .reg_write_mem(reg_write_ex_mem), 
+      .reg_write_wb(reg_write_mem_wb), 
+      .rs1_exists (!jump_id_ex),
+      .rs2_exists (!alu_src_id_ex && !jump_id_ex),
+      .rs1_mux (mux3_1_sel),
+      .rs2_mux (mux3_2_sel)
+  );
 mux_2 #(
    .DATA_W(64)
 ) alu_operand_mux (
    .input_a (immediate_extended_id_ex),
    .input_b (regfile_rdata_2_id_ex    ),
    .select_a(alu_src_id_ex           ),
-   .mux_out (alu_operand_2     )
+   .mux_out (alu_tmp_operand_2     )
 );
 
+mux_3 #(
+   .DATA_W(64)
+) alu_operand_mux3_1 (
+   .input_a (alu_tmp_operand_2),
+   .input_b (alu_out_ex_mem    ),
+   .input_c (alu_out_mem_wb    ),
+   .select_a(mux3_2_sel           ),
+   .mux_out (alu_operand_2     )
+);
+mux_3 #(
+   .DATA_W(64)
+) alu_operand_mux3_2 (
+   .input_a (regfile_rdata_1_id_ex),
+   .input_b (alu_out_ex_mem    ),
+   .input_c (alu_out_mem_wb    ),
+   .select_a(mux3_1_sel           ),
+   .mux_out (alu_operand_1     )
+);
 alu#(
    .DATA_W(64)
 ) alu(
-   .alu_in_0 (regfile_rdata_1_id_ex ),
+   .alu_in_0 (alu_operand_1 ),
    .alu_in_1 (alu_operand_2   ),
    .alu_ctrl (alu_control     ),
    .alu_out  (alu_out         ),
